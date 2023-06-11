@@ -24,6 +24,7 @@ from frappe.utils import cstr
 from frappe.utils.make_random import get_random
 
 
+
 @frappe.whitelist()
 def lead(name):
     led = {}
@@ -47,7 +48,6 @@ def lead(name):
             "campaign_name",
             "contact_by",
             "contact_date",
-
             "request_type",
             "market_segment",
             "territory",
@@ -343,15 +343,14 @@ def quotation(name):
             "source",
             "order_lost_reason",
             "status",
-           
             "docstatus",
         ],
     )
-
+    amended_to = frappe.db.get_value("Quotation", {"amended_from": name}, ["name"])
     for x in doc_data:
         qtn["name"] = x.name
         qtn["quotation_to"] = x.quotation_to
-   
+        qtn["amended_to"] = amended_to
         qtn["party_name"] = x.party_name
         qtn["customer_name"] = x.customer_name
         qtn["transaction_date"] = x.transaction_date
@@ -600,6 +599,7 @@ def customer(name):
         fields=[
             "name",
             "customer_name",
+            "sales_person",
             "disabled",
             "customer_type",
             "customer_group",
@@ -625,6 +625,8 @@ def customer(name):
     )
     for x in doc_data:
         cust["name"] = x.name
+        if x.sales_team:
+            cust["sales_person"] = x.sales_team[0].sales_person
         cust["customer_name"] = x.customer_name
         cust["lead_name"] = x.lead_name
         cust["disabled"] = x.disabled
@@ -688,7 +690,18 @@ def customer(name):
             "bypass_credit_limit_check",
         ],
     )
-
+    sales_team = frappe.db.get_all(
+        "Sales Team",
+        filters={"parent": name}, 
+        fields=[
+            "sales_person", 
+            "allocated_percentage", 
+            "allocated_amount", 
+            "commission_rate", 
+            "incentives"
+        ])
+    if sales_team:
+        cust["sales_person"] = sales_team[0]["sales_person"]
     if child_data and doc_data:
         cust["credit_limits"] = child_data
 
@@ -816,6 +829,7 @@ def customer_visit(name):
             "docstatus",
         ],
     )
+    amended_to = frappe.db.get_value("Customer Visit", {"amended_from": name}, ["name"])
     if not doc_data:
         return "لا يوجد"
     address_line1, city, country = frappe.db.get_value(
@@ -824,6 +838,7 @@ def customer_visit(name):
         ["address_line1", "city", "country"],
     )
     response["name"] = doc_data[0].name
+    response["amended_to"] = amended_to
     response["customer"] = doc_data[0].customer
     response["customer_address"] = doc_data[0].customer_address
     response["address_line1"] = address_line1
@@ -888,6 +903,8 @@ def sales_order(name):
         filters={"name": name},
         fields=[
             "name",
+            "total_free_items",
+            "select",
             "customer",
             "customer_name",
             "transaction_date",
@@ -938,9 +955,11 @@ def sales_order(name):
             "docstatus",
         ],
     )
-
+    amended_to = frappe.db.get_value("Sales Order", {"amended_from": name}, ["name"])
     for x in doc_data:
         so["name"] = x.name
+        so["amended_to"] = amended_to
+        so["select"] = x.select
         so["customer"] = x.customer
         so["customer_name"] = x.customer_name
         so["transaction_date"] = x.transaction_date
@@ -949,7 +968,6 @@ def sales_order(name):
         so["tax_id"] = x.order_type
         so["customer_group"] = x.customer_group
         so["territory"] = x.territory
-
         ####START OF ADDRESS & CONTACT####
         so["customer_address"] = x.customer_address
         so["address_line1"] = frappe.db.get_value(
@@ -1001,8 +1019,22 @@ def sales_order(name):
         so["base_grand_total"] = x.base_grand_total
         so["base_in_words"] = x.base_in_words
         so["grand_total"] = x.grand_total
+        so["total_free_items"] = x.total_free_items
         so["in_words"] = x.in_words
         so["docstatus"] = x.docstatus
+
+
+    sales_teams = frappe.db.get_all(
+        "Sales Team",
+        filters={"parent": name}, 
+        fields=[
+            "sales_person", 
+            "allocated_percentage", 
+            "allocated_amount", 
+            "commission_rate", 
+            "incentives"
+        ])
+    
 
     child_data_1 = frappe.db.get_all(
         "Sales Order Item",
@@ -1102,9 +1134,32 @@ def sales_order(name):
             "base_payment_amount",
         ],
     )
+    child_data_4 = frappe.db.get_all(
+        "Free Items",
+        filters={"parent": name},
+        order_by="idx",
+        fields=[
+            "name",
+            "item_code",
+            "item_name",
+            "item_group",
+            "stock_uom",
+            "qty",
+            "uom",
+            "price_list_rate",
+            "rate",
+            "amount",
+        ],
+    )
+    if sales_teams and doc_data:
+        so["sales_team"] = sales_teams
+
 
     if child_data_1 and doc_data:
         so["items"] = child_data_1
+
+    if child_data_4 and doc_data:
+        so["free_items"] = child_data_4
 
     if child_data_2 and doc_data:
         so["taxes"] = child_data_2
@@ -1253,7 +1308,9 @@ def sales_invoice(name):
         filters={"name": name},
         fields=[
             "name",
+            "select",
             "customer",
+            "sales_team.sales_person",
             "customer_name",
             "posting_date",
             "due_date",
@@ -1310,11 +1367,17 @@ def sales_invoice(name):
             "total_free_items",
         ],
     )
-
+    if doc_data:
+        customer_code = frappe.db.get_value("Customer", {"name": doc_data[0]["customer"]}, ["code"])
+    
+    amended_to = frappe.db.get_value("Sales Invoice", {"amended_from": name}, ["name"])
     for x in doc_data:
         sinv["name"] = x.name
+        sinv["amended_to"] = amended_to
+        sinv["select"] = x.select
         sinv["customer"] = x.customer
         sinv["customer_name"] = x.customer_name
+        sinv["customer_code"] = customer_code
         sinv["posting_date"] = x.posting_date
         sinv["discount_type"] = x.select
         sinv["total_free_items"] = x.total_free_items
@@ -1382,6 +1445,18 @@ def sales_invoice(name):
         sinv["longitude"] = x.longitude
         sinv["latitude"] = x.latitude
         sinv["docstatus"] = x.docstatus
+
+
+    sales_teams = frappe.db.get_all(
+        "Sales Team",
+        filters={"parent": name}, 
+        fields=[
+            "sales_person", 
+            "allocated_percentage", 
+            "allocated_amount", 
+            "commission_rate", 
+            "incentives"
+        ])
 
     child_data_1 = frappe.db.get_all(
         "Sales Invoice Item",
@@ -1509,6 +1584,7 @@ def sales_invoice(name):
 
             ],
     )
+
     if child_data_1 and doc_data:
         sinv["items"] = child_data_1
 
@@ -1520,6 +1596,9 @@ def sales_invoice(name):
 
     if child_data_4 and doc_data:
         sinv["free_items"] = child_data_4    
+
+    if sales_teams and doc_data:
+        sinv["sales_team"] = sales_teams
 
     attachments = frappe.db.sql(
         """ Select file_name, file_url,
@@ -1624,6 +1703,7 @@ def payment_entry(name):
             "party_type",
             "party",
             "party_name",
+            "sales_person",
             "posting_date",
             "status",
             "reference_no",
@@ -1637,11 +1717,14 @@ def payment_entry(name):
             "paid_from",
             "paid_to",
             "paid_amount",
+            "customer_code_new",
             "docstatus",
         ],
     )
+    amended_to = frappe.db.get_value("Payment Entry", {"amended_from": name}, ["name"])
     for x in doc_data:
         pe["name"] = x.name
+        pe["amended_to"] = amended_to
         pe["party_type"] = x.party_type
         pe["party"] = x.party
         pe["party_name"] = x.party_name
@@ -1659,7 +1742,8 @@ def payment_entry(name):
         pe["paid_to_account_balance"] = x.paid_to_account_balance
         pe["paid_amount"] = x.paid_amount
         pe["docstatus"] = x.docstatus
-
+        pe["customer_code"] = x.customer_code_new
+        pe["sales_person"] = x.sales_person
     attachments = frappe.db.sql(
         """ Select file_name, file_url,
                                         Date_Format(creation,'%d/%m/%Y') as date_added
@@ -1733,9 +1817,13 @@ def journal_entry(name):
             "mode_of_payment",
         ],
     )
+    amended_to = frappe.db.get_value("Journal Entry", {"amended_from": name}, ["name"])
     if not doc_data:
         return "لا يوجد"
+    
+    
     response["name"] = doc_data[0].name
+    response["amended_to"] = amended_to
     response["docstatus"] = doc_data[0].docstatus
     response["voucher_type"] = doc_data[0].voucher_type
     response["posting_date"] = doc_data[0].posting_date
@@ -2164,8 +2252,10 @@ def stock_entry(name):
             "docstatus",
         ],
     )
+    amended_to = frappe.db.get_value("Stock Entry", {"amended_from": name}, ["name"])
     for x in doc_data:
         se["name"] = x.name
+        se["amended_to"] = amended_to
         se["stock_entry_type"] = x.stock_entry_type
         se["purpose"] = x.purpose
         se["posting_date"] = x.posting_date
@@ -2307,9 +2397,10 @@ def delivery_note(name):
             "docstatus",
         ],
     )
-
+    amended_to = frappe.db.get_value("Delivery Note", {"amended_from": name}, ["name"])
     for x in doc_data:
         dn["name"] = x.name
+        dn["amended_to"] = amended_to
         dn["customer"] = x.customer
         dn["customer_name"] = x.customer_name
         dn["posting_date"] = x.posting_date
@@ -2554,8 +2645,11 @@ def purchase_receipt(name):
             "docstatus",
         ],
     )
+
+    amended_to = frappe.db.get_value("Purchase Receipt", {"amended_from": name}, ["name"])
     for x in doc_data:
         response["name"] = x.name
+        response["amended_to"] = amended_to
         response["supplier"] = x.supplier
         response["supplier_name"] = x.supplier_name
         response["status"] = x.status
@@ -3154,8 +3248,10 @@ def supplier_quotation(name):
             "tc_name",
         ],
     )
+    amended_to = frappe.db.get_value("Supplier Quotation", {"amended_from": name}, ["name"])
     for row in doc_data:
         response["name"] = row.name
+        response["amended_to"] = amended_to
         response["supplier"] = row.supplier
         response["supplier_name"] = row.supplier_name
         response["transaction_date"] = row.transaction_date
@@ -3482,11 +3578,10 @@ def purchase_order(name):
             "inter_company_order_reference",
         },
     )
-
+    amended_to = frappe.db.get_value("Quotation", {"Purchase Order": name}, ["name"])
     for row in doc_data:
         response["name"] = row.name
-        # response["naming_series"] = row.naming_series
-        # response["title"] = row.title
+        response["amended_to"] = amended_to
         response["supplier"] = row.supplier
         response["supplier_name"] = row.supplier_name
         response["transaction_date"] = row.transaction_date
@@ -3862,7 +3957,7 @@ def purchase_order(name):
 @frappe.whitelist(allow_guest=True)
 def purchase_invoice(name):
     response = {}
-    # DocType
+
     doc_data = frappe.db.get_all(
         "Purchase Invoice",
         filters={"name": name},
@@ -3964,8 +4059,10 @@ def purchase_invoice(name):
             "to_date",
         ],
     )
+    amended_to = frappe.db.get_value("Purchase Invoice", {"amended_from": name}, ["name"])
     for row in doc_data:
         response["name"] = row.name
+        response["amended_to"] = amended_to
         response["supplier"] = row.supplier
         response["supplier_name"] = row.supplier_name
         response["posting_date"] = row.posting_date
@@ -4428,8 +4525,9 @@ def material_request(name):
             "per_received",
         ],
     )
+    amended_to = frappe.db.get_value("Material Request", {"amended_from": name}, ["name"])
     response["name"] = doc_data[0].name
-
+    response["amended_to"] = amended_to
     response["material_request_type"] = doc_data[0].material_request_type
     response["status"] = doc_data[0].status
     response["docstatus"] = doc_data[0].docstatus
@@ -4604,9 +4702,11 @@ def leave_application(name):
             "department",
         ],
     )
+    amended_to = frappe.db.get_value("Leave Application", {"amended_from": name}, ["name"])
     if not doc_data:
         return "لا يوجد"
     response["name"] = doc_data[0].name
+    response["amended_to"] = amended_to
     response["docstatus"] = doc_data[0].docstatus
     response["employee"] = doc_data[0].employee
     response["employee_name"] = doc_data[0].employee_name
@@ -4953,11 +5053,18 @@ def attendance_request(name):
             "half_day_date",
             "reason",
             "explanation",
+            "longitude",
+            "latitude",
+            "location",
+            "from_time",
+            "to_time"
         ],
     )
+    amended_to = frappe.db.get_value("Attendance Request", {"amended_from": name}, ["name"])
     if not doc_data:
         return "لا يوجد"
     response["name"] = doc_data[0].name
+    response["amended_to"] = amended_to
     response["docstatus"] = doc_data[0].docstatus
     response["employee"] = doc_data[0].employee
     response["employee_name"] = doc_data[0].employee_name
@@ -4969,6 +5076,11 @@ def attendance_request(name):
     response["half_day_date"] = doc_data[0].half_day_date
     response["reason"] = doc_data[0].reason
     response["explanation"] = doc_data[0].explanation
+    response["longitude"] = doc_data[0].longitude
+    response["latitude"] = doc_data[0].latitude
+    response["location"] = doc_data[0].location
+    response["from_time"] = doc_data[0].from_time
+    response["to_time"] = doc_data[0].to_time
     attachments = frappe.db.sql(
         """ Select file_name, file_url,
                                         Date_Format(creation,'%d/%m/%Y') as date_added

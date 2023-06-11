@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 import frappe
 import traceback
 import unicodedata
@@ -64,6 +65,7 @@ def quotation(**kwargs):
 def customer(**kwargs):
     customer = frappe.new_doc("Customer")
     customer.customer_name = kwargs["data"].get("customer_name", None)
+    customer.mobile_no = kwargs["data"].get("mobile_no", None)
     customer.lead_name = kwargs["data"].get("lead_name", None)
     customer.customer_type = kwargs["data"].get("customer_type", None)
     customer.customer_group = kwargs["data"].get("customer_group", None)
@@ -74,9 +76,26 @@ def customer(**kwargs):
     customer.default_currency = kwargs["data"].get("default_currency", None)
     customer.default_price_list = kwargs["data"].get("default_price_list", None)
     customer.default_sales_partner = kwargs["data"].get("default_sales_partner", None)
+    customer.payment_terms = kwargs["data"].get("payment_terms", None)
     customer.longitude = kwargs["data"].get("longitude", None)
     customer.latitude = kwargs["data"].get("latitude", None)
     customer.append("credit_limits", kwargs["data"].get("credit_limits")[0])
+    customer.new_governorate = kwargs["data"].get("new_governorate", None)
+
+    # START CODE THAT ONLY FROM EGUE AND ITS SIMILAR
+    # only for egeu and company that like it, because each customer has exactly one sales_person
+    # also the key is 'sales_person' not 'sales_team'
+    kwargs["data"]["sales_team"] = [{"sales_person": kwargs["sales_person"]}]
+    # END CODE THAT FOR ONLY EGUE AND ITS SIMILAR
+
+    sales_team = kwargs["data"]["sales_team"]
+    if len(sales_team) == 1:
+        sales_team[0]["allocated_percentage"] = 100
+        sales_team[0]["commission_rate"] = 2
+
+    for x in sales_team:
+        customer.append("sales_team", x)
+
     customer.insert()
     customer_name = customer.name
     # credit_limit = [
@@ -134,11 +153,10 @@ def customer(**kwargs):
         }
     )
     if (
-        kwargs["data"].get("customer_name")
-        and kwargs["data"].get("email_id")
-        and kwargs["data"].get("mobile_no")
+            kwargs["data"].get("customer_name")
+            and kwargs["data"].get("email_id")
+            and kwargs["data"].get("mobile_no")
     ):
-
         contact.insert()
         customer.customer_primary_contact = contact.name
 
@@ -160,10 +178,10 @@ def customer(**kwargs):
     # address.links = address_link
 
     if (
-        kwargs["data"].get("customer_name")
-        and kwargs["data"].get("address_line1")
-        and kwargs["data"].get("city")
-        and kwargs["data"].get("address_type", "Billing")
+            kwargs["data"].get("customer_name")
+            and kwargs["data"].get("address_line1")
+            and kwargs["data"].get("city")
+            and kwargs["data"].get("address_type", "Billing")
     ):
         address.insert()
         customer.customer_primary_address = address.name
@@ -186,49 +204,135 @@ def customer(**kwargs):
 
 @frappe.whitelist(allow_guest=True)
 def sales_order(**kwargs):
+    sales_order = frappe.get_doc(kwargs['data'])
+    sales_order.customer_address_2 = sales_order.customer_address
+    customer = frappe.get_doc("Customer", kwargs['data']['customer'])
 
-    sales_order = frappe.get_doc(kwargs["data"])
+    sales_team = frappe.get_all("Sales Team", filters={"parent": sales_order.customer},
+                                fields=["sales_person", "allocated_percentage", "allocated_amount", "commission_rate",
+                                        "incentives"])
+    if not sales_team:
+        frappe.response["http_status_code"] = 404
+        frappe.response["success_key"] = False
+        frappe.response["message"] = "this Customer does not have a Sales Person"
+        return
+
+    for x in sales_team:
+        sales_order.append("sales_team", x)
+
+    # if customer.tax_type == "Taxable":
 
     sales_order.insert()
-    sales_order_name = sales_order.name
+    # sales_order.save()
     frappe.db.commit()
-    if sales_order_name:
+    if (sales_order.name):
         message = frappe.response["message"] = {
             "success_key": True,
             "message": "تم اضافة المعاملة بنجاح!",
-            "sales_order": sales_order_name,
+            "sales_order": sales_order.name
         }
         return message
     else:
         return "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
+
+    # elif customer.tax_type == "Commercial":
+    #     sales_order = frappe.get_doc({
+    #         "doctype": "Sales Order",
+    #         "customer": kwargs['data']['customer'],
+    #         "customer_name": kwargs['data']['customer_name'],
+    #         "transaction_date": kwargs['data']['transaction_date'],
+    #         "delivery_date": kwargs['data']['delivery_date'],
+    #         "customer_group": kwargs['data']['customer_group'],
+    #         "territory": kwargs['data']['territory'],
+    #         "customer_address": kwargs['data']['customer_address'],
+    #         "customer_address_2": kwargs['data']['customer_address'],
+    #         "project": kwargs['data']['project'],
+    #         "order_type": kwargs['data']['order_type'],
+    #         "currency": kwargs['data']['currency'],
+    #         "conversion_rate": kwargs['data']['conversion_rate'],
+    #         "selling_price_list": kwargs['data']['selling_price_list'],
+    #         "price_list_currency": kwargs['data']['price_list_currency'],
+    #         "plc_conversion_rate": kwargs['data']['plc_conversion_rate'],
+    #         "set_warehouse": kwargs['data']['set_warehouse'],
+    #         "tc_name": kwargs['data']['tc_name'],
+    #         # "terms": kwargs['data']['terms'],
+    #         "payment_terms_template": kwargs['data']['payment_terms_template'],
+    #         # "apply_discount_on": "On Net Total" ,
+    #         # "additional_discount_percentage": 0 ,
+    #         # "discount_amount": 0,
+    #         "sales_partner": "ahmed",
+    #         "select": kwargs["data"]["select"],
+    #         # "driver": kwargs["data"]["driver"],
+    #         # "vehicle": kwargs["data"]["vehicle"],
+    #         "items": kwargs['data']['items']
+    #     })
+    #
+    #     sales_order.insert()
+    #     sales_order.save()
+    #     sales_order_name = sales_order.name
+    #     frappe.db.commit()
+    #     if (sales_order_name):
+    #         message = frappe.response["message"] = {
+    #             "success_key": True,
+    #             "message": "تم اضافة المعاملة بنجاح!",
+    #             "sales_order": sales_order_name
+    #         }
+    #         return message
+    #     else:
+    #         return "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
 
 
 @frappe.whitelist(allow_guest=True)
 def sales_invoice(**kwargs):
-    if kwargs["data"]["select"]:
-        if kwargs["data"]["select"] == "عرض":
-            total_free_items = 0
-            for i in kwargs["data"]["free_items"]:
-                amount = float(i["rate"]) * float(i["qty"])
-                total_free_items += amount
-    
-    kwargs["data"]["total_free_items"] = total_free_items
-                
     sales_invoice = frappe.get_doc(kwargs["data"])
-    
-                
+
+    sales_team = frappe.get_all("Sales Team", filters={"parent": sales_invoice.customer},
+                                fields=["sales_person", "allocated_percentage", "allocated_amount", "commission_rate",
+                                        "incentives"])
+    if not sales_team:
+        frappe.response["http_status_code"] = 404
+        frappe.response["success_key"] = False
+        frappe.response["message"] = "this Customer does not have a Sales Person"
+        return
+
+    # calling this endpoint to get customer details that contains sales_person property
+    # yes, we can fetch the sales_person from database directly, but don't repeat yourself
+    # customer = frappe.local.request(method="GET", url="/api/method/ecs_mobile.pages.customer",
+    #                                 params={"name": kwargs["data"]["customer"]})
+    #
+    # sales_team = frappe.new_doc("Sales Team")
+    # sales_team.sales_person = customer.sales_person
+
+    # customer = frappe.get_doc("Customer", kwargs['data']['customer'])
+    # if customer.tax_type == "Taxable":
+    #     sales_invoice.naming_series = "INV-"
+    # elif customer.tax_type == "Commercial":
+    #     sales_invoice.naming_series = "SINV-"
+    #
+    # for key, value in kwargs["data"]:
+    #     sales_invoice[key] = value
+
+    for x in sales_team:
+        sales_invoice.append("sales_team", x)
+
+    response = {"status": 200, "success_key": True}
+
     sales_invoice.insert()
-    sales_invoice_name = sales_invoice.name
     frappe.db.commit()
-    if sales_invoice_name:
-        message = frappe.response["message"] = {
-            "success_key": True,
-            "message": "تم اضافة المعاملة بنجاح!",
-            "sales_invoice": sales_invoice_name,
-        }
-        return message
+    if (sales_invoice.name):
+        response["message"] = "تم اضافة المعاملة بنجاح!"
+        response["sales_invoice"] = sales_invoice.name
+
     else:
-        return "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
+        response["status"] = frappe.response["http_status_code"] = 404
+        response["success_key"] = False
+        response["message"] = "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
+
+    return response
+
+
+# except Exception as e:
+#     return e
 
 
 @frappe.whitelist(allow_guest=True)
@@ -301,7 +405,7 @@ def item(**kwargs):
         return "حدث خطأ ولم نتمكن من اضافة الصنف . برجاء المحاولة مرة اخري!"
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def stock_entry(**kwargs):
     stock_entry = frappe.get_doc(kwargs["data"])
     stock_entry.insert()
@@ -371,81 +475,375 @@ def comment(**kwargs):
         return "حدث خطأ ولم نتمكن من اضافة التعليق . برجاء المحاولة مرة اخري!"
 
 
+@frappe.whitelist(allow_guest=True)
+def add_item_list(**kwargs):
+    start = 0
+    page_length = 20
+    try:
+        if kwargs["search_text"]:
+            items = frappe.db.sql(
+                """ select tabItem.name as name ,
+                                                     tabItem.item_code as item_code, 
+                                                     tabItem.item_name as item_name, 
+                                                     tabItem.item_group as item_group, 
+                                                     tabItem.stock_uom as stock_uom, 
+                                                     tabItem.image as image,
+                                                     tabItem.sales_uom as sales_uom,
+                                                     ifnull((select max(price_list_rate)  from `tabItem Price` where item_code = tabItem.name and price_list = '{price_list}'),0) as price_list_rate,
+                                                     ifnull((select distinct `tabItem Tax Template Detail`.tax_rate from `tabItem Tax Template Detail` join `tabItem Tax` 
+                                                     where `tabItem Tax Template Detail`.parent = `tabItem Tax`.item_tax_template and `tabItem Tax`.parent = `tabItem`.name),0) as tax_percent
+                                                     from tabItem  where tabItem.disabled = 0 and tabItem.name like '%{item}%' or tabItem.item_name like '%{item}%' LIMIT {start},{page_length}""".format(
+                    start=kwargs["start"],
+                    page_length=kwargs["page_length"],
+                    price_list=kwargs["price_list"],
+                    item=kwargs["search_text"],
+                ),
+                as_dict=1,
+            )
+            result = []
+            for item_dict in items:
+                if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
+                    net_rate = item_dict.price_list_rate * (
+                            1 + (item_dict.tax_percent / 100)
+                    )
+                    vat_value = net_rate - item_dict.price_list_rate
+                    data = {
+                        "name": item_dict.name,
+                        "item_code": item_dict.item_code,
+                        "item_name": item_dict.item_name,
+                        "item_group": item_dict.item_group,
+                        "uom": item_dict.stock_uom,
+                        "stock_uom": item_dict.stock_uom,
+                        "image": item_dict.image,
+                        "sales_uom": item_dict.sales_uom,
+                        "price_list_rate": item_dict.price_list_rate,
+                        "tax_percent": item_dict.tax_percent,
+                        "net_rate": net_rate,
+                        "vat_value": vat_value,
+                    }
+                    result.append(data)
+                else:
+                    data = {
+                        "name": item_dict.name,
+                        "item_code": item_dict.item_code,
+                        "item_name": item_dict.item_name,
+                        "item_group": item_dict.item_group,
+                        "uom": item_dict.stock_uom,
+                        "stock_uom": item_dict.stock_uom,
+                        "image": item_dict.image,
+                        "sales_uom": item_dict.sales_uom,
+                        "price_list_rate": item_dict.price_list_rate,
+                        "tax_percent": item_dict.tax_percent,
+                        "net_rate": item_dict.price_list_rate,
+                    }
+                    result.append(data)
+
+            if items:
+                return result
+            else:
+                return "لا يوجد منتجات !"
+
+    except:
+        items = frappe.db.sql(
+            """ select tabItem.name as name,
+                                         tabItem.item_code as item_code,
+                                         tabItem.item_name as item_name, 
+                                         tabItem.item_group as item_group, 
+                                         tabItem.stock_uom as stock_uom, 
+                                         tabItem.image as image,
+                                         tabItem.sales_uom as sales_uom,
+                                         ifnull((select max(price_list_rate) from `tabItem Price` where item_code = tabItem.name and price_list = '{price_list}'),0) as price_list_rate,
+                                         ifnull((select distinct `tabItem Tax Template Detail`.tax_rate from `tabItem Tax Template Detail` join `tabItem Tax` 
+                                         where `tabItem Tax Template Detail`.parent = `tabItem Tax`.item_tax_template and `tabItem Tax`.parent = `tabItem`.name),0) as tax_percent
+                                         from tabItem where tabItem.disabled = 0 LIMIT {start},{page_length} """.format(
+                start=kwargs["start"],
+                page_length=kwargs["page_length"],
+                price_list=kwargs["price_list"],
+            ),
+            as_dict=1,
+        )
+
+        result = []
+        for item_dict in items:
+            if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
+                net_rate = item_dict.price_list_rate * (
+                        1 + (item_dict.tax_percent / 100)
+                )
+                vat_value = net_rate - item_dict.price_list_rate
+                data = {
+                    "name": item_dict.name,
+                    "item_code": item_dict.item_code,
+                    "item_name": item_dict.item_name,
+                    "item_group": item_dict.item_group,
+                    "uom": item_dict.stock_uom,
+                    "stock_uom": item_dict.stock_uom,
+                    "image": item_dict.image,
+                    "sales_uom": item_dict.sales_uom,
+                    "price_list_rate": item_dict.price_list_rate,
+                    "tax_percent": item_dict.tax_percent,
+                    "net_rate": net_rate,
+                    "vat_value": vat_value,
+                }
+                result.append(data)
+            else:
+                data = {
+                    "name": item_dict.name,
+                    "item_code": item_dict.item_code,
+                    "item_name": item_dict.item_name,
+                    "item_group": item_dict.item_group,
+                    "uom": item_dict.stock_uom,
+                    "stock_uom": item_dict.stock_uom,
+                    "image": item_dict.image,
+                    "sales_uom": item_dict.sales_uom,
+                    "price_list_rate": item_dict.price_list_rate,
+                    "tax_percent": item_dict.tax_percent,
+                    "net_rate": item_dict.price_list_rate,
+                }
+                result.append(data)
+
+        if items:
+            return result
+        else:
+            return "لا يوجد منتجات !"
+
+
+'''
+@frappe.whitelist(allow_guest=True)
+def add_item_list(**kwargs):
+    start = 0
+    page_length = 20
+    user = frappe.session.user
+    warehouse = frappe.db.get_value("Employee", {'user_id': user}, "warehouse")
+    try:
+        if kwargs['search_text']:
+            items = frappe.db.sql(""" select tabItem.name as name ,
+                                                     tabItem.item_name as item_name, 
+                                                     tabItem.item_group as item_group, 
+                                                     tabItem.stock_uom as stock_uom, 
+                                                     tabItem.image as image,
+                                                     tabItem.sales_uom as sales_uom,
+                                                     ifnull((select max(price_list_rate)  from `tabItem Price` where item_code = tabItem.name and price_list = '{price_list}'),0) as price_list_rate,
+                                                     ifnull((select distinct `tabItem Tax Template Detail`.tax_rate from `tabItem Tax Template Detail` join `tabItem Tax` 
+                                                     where `tabItem Tax Template Detail`.parent = `tabItem Tax`.item_tax_template and `tabItem Tax`.parent = `tabItem`.name),0) as tax_percent
+                                                     from tabItem
+                                                     where tabItem.disabled = 0 
+                                                     and (tabItem.name like '%{item}%' or tabItem.item_name like '%{item}%') LIMIT {start},{page_length}
+                                                     """.format(start=kwargs['start'], page_length=kwargs['page_length'], price_list=kwargs['price_list'], item=kwargs['search_text']), as_dict=1)
+            result = []
+            for item_dict in items:
+                if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
+                    net_rate = item_dict.price_list_rate * (1 + (item_dict.tax_percent / 100))
+                    vat_value = net_rate - item_dict.price_list_rate 
+                    data = {
+                        'name': item_dict.name,
+                        'item_name': item_dict.item_name,
+                        'item_group': item_dict.item_group,
+                        'stock_uom': item_dict.stock_uom,
+                        'image': item_dict.image,
+                        'sales_uom': item_dict.sales_uom,
+                        'price_list_rate': item_dict.price_list_rate,
+                        'tax_percent': item_dict.tax_percent,
+                        'net_rate': net_rate,
+                        'vat_value': vat_value
+                    }
+                    result.append(data)
+                else:
+                    data = {
+                        'name': item_dict.name,
+                        'item_name': item_dict.item_name,
+                        'item_group': item_dict.item_group,
+                        'stock_uom': item_dict.stock_uom,
+                        'image': item_dict.image,
+                        'sales_uom': item_dict.sales_uom,
+                        'price_list_rate': item_dict.price_list_rate,
+                        'tax_percent': item_dict.tax_percent,
+                        'net_rate': item_dict.price_list_rate
+                    }
+                    result.append(data)
+
+            if items:
+                return result
+            else:
+                return "لا يوجد منتجات !"
+
+
+    except:
+        items = frappe.db.sql(""" select tabItem.name as name ,
+                                         tabItem.item_name as item_name, 
+                                         tabItem.item_group as item_group, 
+                                         tabItem.stock_uom as stock_uom, 
+                                         tabItem.image as image,
+                                         tabItem.sales_uom as sales_uom,
+                                         ifnull((select max(price_list_rate)  from `tabItem Price` where item_code = tabItem.name and price_list = '{price_list}'),0) as price_list_rate,
+                                         ifnull((select distinct `tabItem Tax Template Detail`.tax_rate from `tabItem Tax Template Detail` join `tabItem Tax` 
+                                         where `tabItem Tax Template Detail`.parent = `tabItem Tax`.item_tax_template and `tabItem Tax`.parent = `tabItem`.name),0) as tax_percent
+                                         from tabItem
+                                         where tabItem.disabled = 0 LIMIT {start},{page_length}
+                                         """.format(start=kwargs['start'],
+                                                    page_length=kwargs['page_length'],
+                                                    warehouse=warehouse,
+                                                    price_list=kwargs['price_list']), as_dict=1)
+
+        result = []
+        for item_dict in items:
+            if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
+                net_rate = item_dict.price_list_rate * (1 + (item_dict.tax_percent / 100))
+                vat_value = net_rate - item_dict.price_list_rate
+                data = {
+                    'name': item_dict.name,
+                    'item_name': item_dict.item_name,
+                    'item_group': item_dict.item_group,
+                    'stock_uom': item_dict.stock_uom,
+                    'image': item_dict.image,
+                    'sales_uom': item_dict.sales_uom,
+                    'price_list_rate': item_dict.price_list_rate,
+                    'tax_percent': item_dict.tax_percent,
+                    'net_rate': net_rate,
+                    'vat_value': vat_value
+                }
+                result.append(data)
+            else:
+                data = {
+                    'name': item_dict.name,
+                    'item_name': item_dict.item_name,
+                    'item_group': item_dict.item_group,
+                    'stock_uom': item_dict.stock_uom,
+                    'image': item_dict.image,
+                    'sales_uom': item_dict.sales_uom,
+                    'price_list_rate': item_dict.price_list_rate,
+                    'tax_percent': item_dict.tax_percent,
+                    'net_rate': item_dict.price_list_rate
+                }
+                result.append(data)
+
+        if items:
+            return result
+        else:
+            return "لا يوجد منتجات !"
+'''
+
 
 @frappe.whitelist(allow_guest=True)
-def supplier_test(**kwargs):
-    supplier = frappe.new_doc("Supplier")
-    supplier.supplier_name = kwargs["data"]["supplier_name"]
-    supplier.supplier_type = kwargs["data"]["supplier_type"]
-    supplier.supplier_group = kwargs["data"]["supplier_group"]
-    supplier.tax_id = kwargs["data"]["tax_id"]
-    supplier.default_currency = kwargs["data"]["default_currency"]
-    supplier.default_price_list = kwargs["data"]["default_price_list"]
-    supplier.payment_terms = kwargs["data"]["payment_terms"]
-    supplier.country = kwargs["data"]["country"]
-    supplier.insert()
-    supplier_name = supplier.name
+def add_item_list_warehouse_filtered(**kwargs):
+    start = 0
+    page_length = 20
+    user = frappe.session.user
+    warehouse = frappe.db.get_value("Employee", {'user_id': user}, "warehouse")
+    try:
+        if kwargs['search_text']:
+            items = frappe.db.sql(""" select tabItem.name as name ,
+                                                     tabItem.item_name as item_name, 
+                                                     tabItem.item_group as item_group, 
+                                                     tabItem.stock_uom as stock_uom, 
+                                                     tabItem.image as image,
+                                                     tabItem.sales_uom as sales_uom,
+                                                     tabBin.actual_qty as actual_qty,
+                                                     ifnull((select max(price_list_rate)  from `tabItem Price` where item_code = tabItem.name and price_list = '{price_list}'),0) as price_list_rate,
+                                                     ifnull((select distinct `tabItem Tax Template Detail`.tax_rate from `tabItem Tax Template Detail` join `tabItem Tax` 
+                                                     where `tabItem Tax Template Detail`.parent = `tabItem Tax`.item_tax_template and `tabItem Tax`.parent = `tabItem`.name),0) as tax_percent
+                                                     from tabItem join tabBin on tabItem.item_code = tabBin.item_code 
+                                                     where tabBin.warehouse = '{warehouse}' and tabBin.actual_qty > 0 and tabItem.disabled = 0 and (tabItem.name like '%{item}%' or tabItem.item_name like '%{item}%') LIMIT {start},{page_length}
+                                                     """.format(start=kwargs['start'],
+                                                                page_length=kwargs['page_length'], warehouse=warehouse,
+                                                                price_list=kwargs['price_list'],
+                                                                item=kwargs['search_text']), as_dict=1)
+            result = []
+            for item_dict in items:
+                if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
+                    net_rate = item_dict.price_list_rate * (1 + (item_dict.tax_percent / 100))
+                    vat_value = net_rate - item_dict.price_list_rate
+                    data = {
+                        'name': item_dict.name,
+                        'item_name': item_dict.item_name,
+                        'item_group': item_dict.item_group,
+                        'stock_uom': str(item_dict.actual_qty),
+                        'image': item_dict.image,
+                        'sales_uom': str(item_dict.actual_qty),
+                        'actual_qty': item_dict.actual_qty,
+                        'price_list_rate': item_dict.price_list_rate,
+                        'tax_percent': item_dict.tax_percent,
+                        'net_rate': net_rate,
+                        'vat_value': vat_value
+                    }
+                    result.append(data)
+                else:
+                    data = {
+                        'name': item_dict.name,
+                        'item_name': item_dict.item_name,
+                        'item_group': item_dict.item_group,
+                        'stock_uom': str(item_dict.actual_qty),
+                        'image': item_dict.image,
+                        'sales_uom': str(item_dict.actual_qty),
+                        'actual_qty': item_dict.actual_qty,
+                        'price_list_rate': item_dict.price_list_rate,
+                        'tax_percent': item_dict.tax_percent,
+                        'net_rate': item_dict.price_list_rate
+                    }
+                    result.append(data)
 
-    links = [
-        {
-            "link_doctype": "Supplier",
-            "link_name": supplier_name,
-            "link_title": supplier_name,
-        }
-    ]
+            if items:
+                return result
+            else:
+                return "لا يوجد منتجات !"
 
-    emails = [{"email_id": kwargs["data"]["email_id"], "is_primary": 1}]
 
-    contacts = [
-        {
-            "phone": kwargs["data"]["mobile_no"],
-            "is_primary_phone": 1,
-            "is_primary_mobile_no": 1,
-        }
-    ]
+    except:
+        items = frappe.db.sql(""" select tabItem.name as name ,
+                                         tabItem.item_name as item_name, 
+                                         tabItem.item_group as item_group, 
+                                         tabItem.stock_uom as stock_uom, 
+                                         tabItem.image as image,
+                                         tabItem.sales_uom as sales_uom,
+                                         tabBin.actual_qty as actual_qty,
+                                         ifnull((select max(price_list_rate)  from `tabItem Price` where item_code = tabItem.name and price_list = '{price_list}'),0) as price_list_rate,
+                                         ifnull((select distinct `tabItem Tax Template Detail`.tax_rate from `tabItem Tax Template Detail` join `tabItem Tax` 
+                                         where `tabItem Tax Template Detail`.parent = `tabItem Tax`.item_tax_template and `tabItem Tax`.parent = `tabItem`.name),0) as tax_percent
+                                         from tabItem join tabBin on tabItem.item_code = tabBin.item_code 
+                                         where tabBin.warehouse = '{warehouse}' and tabBin.actual_qty > 0 
+                                         and tabItem.disabled = 0 LIMIT {start},{page_length}
+                                         """.format(start=kwargs['start'],
+                                                    page_length=kwargs['page_length'],
+                                                    warehouse=warehouse,
+                                                    price_list=kwargs['price_list']), as_dict=1)
 
-    contact = frappe.get_doc(
-        {
-            "doctype": "Contact",
-            "first_name": kwargs["data"]["supplier_name"],
-            "links": links,
-            "email_ids": emails,
-            "phone_nos": contacts,
-            "is_primary_contact": 1,
-            "is_billing_contact": 1,
-        }
-    )
-    contact.insert()
+        result = []
+        for item_dict in items:
+            if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
+                net_rate = item_dict.price_list_rate * (1 + (item_dict.tax_percent / 100))
+                vat_value = net_rate - item_dict.price_list_rate
+                data = {
+                    'name': item_dict.name,
+                    'item_name': item_dict.item_name,
+                    'item_group': item_dict.item_group,
+                    'stock_uom': str(item_dict.actual_qty),
+                    'image': item_dict.image,
+                    'sales_uom': str(item_dict.actual_qty),
+                    'actual_qty': item_dict.actual_qty,
+                    'price_list_rate': item_dict.price_list_rate,
+                    'tax_percent': item_dict.tax_percent,
+                    'net_rate': net_rate,
+                    'vat_value': vat_value
+                }
+                result.append(data)
+            else:
+                data = {
+                    'name': item_dict.name,
+                    'item_name': item_dict.item_name,
+                    'item_group': item_dict.item_group,
+                    'stock_uom': str(item_dict.actual_qty),
+                    'image': item_dict.image,
+                    'sales_uom': str(item_dict.actual_qty),
+                    'actual_qty': item_dict.actual_qty,
+                    'price_list_rate': item_dict.price_list_rate,
+                    'tax_percent': item_dict.tax_percent,
+                    'net_rate': item_dict.price_list_rate
+                }
+                result.append(data)
 
-    address = frappe.get_doc(
-        {
-            "doctype": "Address",
-            "address_title": kwargs["data"]["supplier_name"],
-            "address_line1": kwargs["data"]["address_line1"],
-            "city": kwargs["data"]["city"],
-            "country": kwargs["data"]["country"],
-            "address_type": "Billing",
-            "links": links,
-            "is_primary_address_type": 1,
-            "is_shipping_address_type": 1,
-        }
-    )
-    address.insert()
-
-    supplier.supplier_primary_address = address.name
-    supplier.supplier_primary_contact = contact.name
-    supplier.save()
-
-    frappe.db.commit()
-    if supplier_name:
-        message = frappe.response["message"] = {
-            "success_key": True,
-            "message": "تم اضافة المعاملة بنجاح!",
-            "name": supplier_name,
-        }
-        return message
-    else:
-        return "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
+        if items:
+            return result
+        else:
+            return "لا يوجد منتجات !"
 
 
 @frappe.whitelist(allow_guest=True)
@@ -469,6 +867,7 @@ def supplier_quotation(**kwargs):
 @frappe.whitelist(allow_guest=True)
 def purchase_order(**kwargs):
     p_order = frappe.get_doc(kwargs["data"])
+
     p_order.insert()
     purchase_order_name = p_order.name
     frappe.db.commit()
@@ -522,6 +921,7 @@ def purchsae_receipt(**kwargs):
 @frappe.whitelist(allow_guest=True)
 def material_request(**kwargs):
     material_request_data = frappe.get_doc(kwargs["data"])
+
     material_request_data.insert()
     material_request_data_name = material_request_data.name
     frappe.db.commit()
@@ -602,19 +1002,18 @@ def supplier(**kwargs):
         }
     )
     if (
-        kwargs["data"].get("supplier_name")
-        and kwargs["data"].get("email_id")
-        and kwargs["data"].get("mobile_no")
+            kwargs["data"].get("supplier_name")
+            and kwargs["data"].get("email_id")
+            and kwargs["data"].get("mobile_no")
     ):
-
         contact.insert()
         supplier.supplier_primary_contact = contact.name
 
     if (
-        kwargs["data"].get("supplier_name")
-        and kwargs["data"].get("address_line1")
-        and kwargs["data"].get("city")
-        and kwargs["data"].get("address_type", "Billing")
+            kwargs["data"].get("supplier_name")
+            and kwargs["data"].get("address_line1")
+            and kwargs["data"].get("city")
+            and kwargs["data"].get("address_type", "Billing")
     ):
         address = frappe.get_doc(
             {
@@ -818,16 +1217,16 @@ def address(**kwargs):
     )
     address.insert()
     if (
-        kwargs["data"].get("is_primary_address", 0)
-        and kwargs["data"]["link_doctype"] == "Customer"
+            kwargs["data"].get("is_primary_address", 0)
+            and kwargs["data"]["link_doctype"] == "Customer"
     ):
         customer = frappe.get_doc("Customer", kwargs["data"]["link_name"])
         customer.customer_primary_address = address.name
         customer.save()
 
     if (
-        kwargs["data"].get("is_primary_address", 0)
-        and kwargs["data"]["link_doctype"] == "Supplier"
+            kwargs["data"].get("is_primary_address", 0)
+            and kwargs["data"]["link_doctype"] == "Supplier"
     ):
         customer = frappe.get_doc("Supplier", kwargs["data"]["link_name"])
         customer.supplier_primary_address = address.name
@@ -907,5 +1306,4 @@ def contact(**kwargs):
         return message
     else:
         return "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
-
 

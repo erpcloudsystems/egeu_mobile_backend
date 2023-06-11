@@ -15,7 +15,6 @@ current_user = frappe.session.user
 @frappe.whitelist(allow_guest=True)
 def login(usr, pwd):
 
-    
     try:
         login_manager = frappe.auth.LoginManager()
         login_manager.authenticate(user=usr, pwd=pwd)
@@ -37,6 +36,8 @@ def login(usr, pwd):
         modules = []
 
         for module in allowed_modules:
+            
+                
             if module.modq == "Accounts":
                 Accounts = {}
 
