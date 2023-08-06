@@ -1,4 +1,3 @@
-
 import frappe
 import erpnext
 from frappe import auth
@@ -7,6 +6,8 @@ import datetime
 import json, ast
 from erpnext.accounts.utils import get_balance_on
 from six import iteritems, string_types
+
+from .helpers import remove_html_tags, get_timesheet_task_count
 
 from frappe.utils import (
     flt,
@@ -22,7 +23,6 @@ from frappe.utils import (
 from frappe.utils import add_to_date, now, nowdate
 from frappe.utils import cstr
 from frappe.utils.make_random import get_random
-
 
 
 @frappe.whitelist()
@@ -692,12 +692,12 @@ def customer(name):
     )
     sales_team = frappe.db.get_all(
         "Sales Team",
-        filters={"parent": name}, 
+        filters={"parent": name},
         fields=[
-            "sales_person", 
-            "allocated_percentage", 
-            "allocated_amount", 
-            "commission_rate", 
+            "sales_person",
+            "allocated_percentage",
+            "allocated_amount",
+            "commission_rate",
             "incentives"
         ])
     if sales_team:
@@ -809,7 +809,6 @@ def customer(name):
 
 @frappe.whitelist()
 def customer_visit(name):
-
     response = {}
 
     doc_data = frappe.db.get_all(
@@ -1023,18 +1022,16 @@ def sales_order(name):
         so["in_words"] = x.in_words
         so["docstatus"] = x.docstatus
 
-
     sales_teams = frappe.db.get_all(
         "Sales Team",
-        filters={"parent": name}, 
+        filters={"parent": name},
         fields=[
-            "sales_person", 
-            "allocated_percentage", 
-            "allocated_amount", 
-            "commission_rate", 
+            "sales_person",
+            "allocated_percentage",
+            "allocated_amount",
+            "commission_rate",
             "incentives"
         ])
-    
 
     child_data_1 = frappe.db.get_all(
         "Sales Order Item",
@@ -1153,7 +1150,6 @@ def sales_order(name):
     )
     if sales_teams and doc_data:
         so["sales_team"] = sales_teams
-
 
     if child_data_1 and doc_data:
         so["items"] = child_data_1
@@ -1302,7 +1298,6 @@ def sales_order(name):
 
 @frappe.whitelist()
 def sales_invoice(name):
-    sinv = {}
     doc_data = frappe.db.get_all(
         "Sales Invoice",
         filters={"name": name},
@@ -1365,11 +1360,19 @@ def sales_invoice(name):
             "docstatus",
             "select",
             "total_free_items",
+            "bouns_amount",
+            "remaining_bonus_amount",
         ],
     )
+
+    if not doc_data:
+        return "لا يوجد فاتورة مبيعات بهذا الاسم"
+
+    sinv = {}
+
     if doc_data:
         customer_code = frappe.db.get_value("Customer", {"name": doc_data[0]["customer"]}, ["code"])
-    
+
     amended_to = frappe.db.get_value("Sales Invoice", {"amended_from": name}, ["name"])
     for x in doc_data:
         sinv["name"] = x.name
@@ -1446,15 +1449,17 @@ def sales_invoice(name):
         sinv["latitude"] = x.latitude
         sinv["docstatus"] = x.docstatus
 
+        sinv["bouns_amount"] = x.bouns_amount
+        sinv["remaining_bonus_amount"] = x.remaining_bonus_amount
 
     sales_teams = frappe.db.get_all(
         "Sales Team",
-        filters={"parent": name}, 
+        filters={"parent": name},
         fields=[
-            "sales_person", 
-            "allocated_percentage", 
-            "allocated_amount", 
-            "commission_rate", 
+            "sales_person",
+            "allocated_percentage",
+            "allocated_amount",
+            "commission_rate",
             "incentives"
         ])
 
@@ -1549,40 +1554,40 @@ def sales_invoice(name):
         filters={"parent": name},
         fields=[
             "idx",
-                "name",
-                "item_code",
-                "item_name",
-                "description",
-                "item_group",
-                "brand",
-                "image",
-                "qty",
-                "stock_uom",
-                "uom",
-                "conversion_factor",
-                "stock_qty",
-                "price_list_rate",
-                "base_price_list_rate",
-                "margin_type",
-                "margin_rate_or_amount",
-                "rate_with_margin",
-                "discount_percentage",
-                "discount_amount",
-                "base_rate_with_margin",
-                "rate",
-                "net_rate",
-                "amount",
-                "item_tax_template",
-                "net_amount",
-                "base_rate",
-                "base_net_rate",
-                "base_amount",
-                "base_net_amount",
-                "warehouse",
-                "actual_qty",
-                "delivered_qty"
+            "name",
+            "item_code",
+            "item_name",
+            "description",
+            "item_group",
+            "brand",
+            "image",
+            "qty",
+            "stock_uom",
+            "uom",
+            "conversion_factor",
+            "stock_qty",
+            "price_list_rate",
+            "base_price_list_rate",
+            "margin_type",
+            "margin_rate_or_amount",
+            "rate_with_margin",
+            "discount_percentage",
+            "discount_amount",
+            "base_rate_with_margin",
+            "rate",
+            "net_rate",
+            "amount",
+            "item_tax_template",
+            "net_amount",
+            "base_rate",
+            "base_net_rate",
+            "base_amount",
+            "base_net_amount",
+            "warehouse",
+            "actual_qty",
+            "delivered_qty"
 
-            ],
+        ],
     )
 
     if child_data_1 and doc_data:
@@ -1595,7 +1600,7 @@ def sales_invoice(name):
         sinv["payment_schedule"] = child_data_3
 
     if child_data_4 and doc_data:
-        sinv["free_items"] = child_data_4    
+        sinv["free_items"] = child_data_4
 
     if sales_teams and doc_data:
         sinv["sales_team"] = sales_teams
@@ -1686,10 +1691,7 @@ def sales_invoice(name):
 
     sinv["conn"] = connections
 
-    if doc_data:
-        return sinv
-    else:
-        return "لا يوجد فاتورة مبيعات بهذا الاسم"
+    return sinv
 
 
 @frappe.whitelist()
@@ -1820,8 +1822,7 @@ def journal_entry(name):
     amended_to = frappe.db.get_value("Journal Entry", {"amended_from": name}, ["name"])
     if not doc_data:
         return "لا يوجد"
-    
-    
+
     response["name"] = doc_data[0].name
     response["amended_to"] = amended_to
     response["docstatus"] = doc_data[0].docstatus
@@ -1902,15 +1903,15 @@ def journal_entry(name):
         for key in journal_entry_account[index]:
             if key == "balance":
                 journal_entry_account[index][key] = (
-                    str(journal_entry_account[index]["balance"])
-                    + " "
-                    + str(
-                        frappe.db.get_value(
-                            "Account",
-                            str(journal_entry_account[index]["account"]),
-                            "account_currency",
-                        )
+                        str(journal_entry_account[index]["balance"])
+                        + " "
+                        + str(
+                    frappe.db.get_value(
+                        "Account",
+                        str(journal_entry_account[index]["account"]),
+                        "account_currency",
                     )
+                )
                 )
     if journal_entry_account and doc_data:
         response["accounts"] = journal_entry_account
@@ -2250,6 +2251,7 @@ def stock_entry(name):
             "to_warehouse",
             "project",
             "docstatus",
+            "customer1",
         ],
     )
     amended_to = frappe.db.get_value("Stock Entry", {"amended_from": name}, ["name"])
@@ -2269,6 +2271,7 @@ def stock_entry(name):
         se["to_warehouse"] = x.to_warehouse
         se["project"] = x.project
         se["docstatus"] = x.docstatus
+        se["customer1"] = x.customer1
 
     child_data = frappe.db.get_all(
         "Stock Entry Detail",
@@ -2918,7 +2921,7 @@ def filtered_address(name):
     )
     result = []
     for item_dict in frappe.db.get_all(
-        "Dynamic Link", filters={"link_name": name}, fields=["parent"]
+            "Dynamic Link", filters={"link_name": name}, fields=["parent"]
     ):
         adddd = frappe.db.get_all(
             "Address",
@@ -2949,7 +2952,7 @@ def filtered_contact(name):
     )
     result = []
     for item_dict in frappe.db.get_all(
-        "Dynamic Link", filters={"link_name": name}, fields=["parent"]
+            "Dynamic Link", filters={"link_name": name}, fields=["parent"]
     ):
         adddd = frappe.db.get_all(
             "Contact",
@@ -5800,4 +5803,11 @@ def contact(name):
     else:
         return "لا يوجد"
 
+
+@frappe.whitelist(methods=["GET"])
+def workflow(name):
+    workflow = frappe.get_doc("Workflow", name)
+    # workflow.creation = humanize_datetime(str(workflow.creation))
+    # workflow.modified = humanize_datetime(str(workflow.modified))
+    return workflow
 

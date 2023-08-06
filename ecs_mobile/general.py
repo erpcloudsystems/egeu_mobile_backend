@@ -23,24 +23,25 @@ from frappe.utils.make_random import get_random
 import time
 
 
+# this endpoint is trash
 @frappe.whitelist()
 def general_service(
-    doctype,
-    filter1="%%",
-    filter2="%%",
-    filter3="%%",
-    filter4="%%",
-    filter5="%%",
-    filter6="%%",
-    filter7="%%",
-    filter8="%%",
-    search_text="%%",
-    cur_nam="%%",
-    con_doc="%%",
-    start=0,
-    page_length=20,
-    sort_field=None,
-    sort_type=None,
+        doctype,
+        filter1="%%",
+        filter2="%%",
+        filter3="%%",
+        filter4="%%",
+        filter5="%%",
+        filter6="%%",
+        filter7="%%",
+        filter8="%%",
+        search_text="%%",
+        cur_nam="%%",
+        con_doc="%%",
+        start=0,
+        page_length=20,
+        sort_field=None,
+        sort_type=None,
 ):
     from .helpers import order_by, remove_html_tags
 
@@ -385,6 +386,7 @@ def general_service(
                 "payment_terms",
                 "default_sales_partner",
                 "default_currency",
+                "new_governorate"
             ],
             order_by=order_by(sort_field, sort_type),
             start=start,
@@ -395,6 +397,7 @@ def general_service(
                 sales_team = frappe.get_doc("Customer", customer["name"]).sales_team
                 if sales_team:
                     customer["sales_person"] = sales_team[0].sales_person
+                customer.governorate = customer.pop("new_governorate", None)
             return query
         else:
             return "لا يوجد !"
@@ -2687,9 +2690,9 @@ def general_service(
             # return query[0].from_date
             for row in range(len(query)):
                 if (
-                    time.strptime(str(query[row].from_date), "%Y-%m-%d")
-                    <= time.strptime(filter3.split("T")[0], "%Y-%m-%d")
-                    <= time.strptime(str(query[row].to_date), "%Y-%m-%d")
+                        time.strptime(str(query[row].from_date), "%Y-%m-%d")
+                        <= time.strptime(filter3.split("T")[0], "%Y-%m-%d")
+                        <= time.strptime(str(query[row].to_date), "%Y-%m-%d")
                 ):
                     response.append(query[row])
 
@@ -3786,6 +3789,15 @@ def general_service(
         else:
             return "لا يوجد !"
 
+    if doctype == "Governorate":
+        results = frappe.db.sql("""
+                SELECT 
+                    name,
+                    governorate_name
+                FROM `tabGovernorate`AS G
+            """, as_dict=True)
+        return results
+
 
 @frappe.whitelist()
 def get_user_default_warehouse():
@@ -3837,12 +3849,12 @@ def get_item_uoms(item_code):
 
 @frappe.whitelist()
 def get_item_list(
-    allow_sales=None,
-    allow_purchase=None,
-    search_text="%%",
-    price_list="%%",
-    start=0,
-    page_length=5,
+        allow_sales=None,
+        allow_purchase=None,
+        search_text="%%",
+        price_list="%%",
+        start=0,
+        page_length=5,
 ):
     conditions = ""
     if allow_purchase is not None:
@@ -3877,7 +3889,7 @@ def get_item_list(
         for item_dict in items:
             if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
                 net_rate = item_dict.price_list_rate * (
-                    1 + (item_dict.tax_percent / 100)
+                        1 + (item_dict.tax_percent / 100)
                 )
                 vat_value = net_rate - item_dict.price_list_rate
                 data = {
@@ -3944,7 +3956,7 @@ def get_item_list(
         for item_dict in items:
             if item_dict.tax_percent > 0 and item_dict.price_list_rate > 0:
                 net_rate = item_dict.price_list_rate * (
-                    1 + (item_dict.tax_percent / 100)
+                        1 + (item_dict.tax_percent / 100)
                 )
                 vat_value = net_rate - item_dict.price_list_rate
                 data = {
@@ -4010,3 +4022,28 @@ def get_reports(module):
         return mobile_reports
 
     frappe.throw("There is no reports to show", frappe.exceptions.DoesNotExistError)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_governorates():
+    results = frappe.db.sql("""
+        SELECT 
+            name,
+            governorate_name
+        FROM `tabGovernorate`AS G
+    """, as_dict=True)
+    return results
+
+
+@frappe.whitelist(methods=["GET"])
+def get_faqs():
+    filters = dict(frappe.local.request.args) or {}
+    faqs = frappe.get_all("FAQ", fields=["question", "answer", "tag"], filters=filters)
+
+    if not faqs:
+        frappe.response['http_status_code'] = 404
+
+    for faq in faqs:
+        faq["answer_without_html"] = remove_html_tags(str(faq["answer"]))
+    return faqs
+

@@ -66,6 +66,7 @@ def customer(**kwargs):
     customer = frappe.new_doc("Customer")
     customer.customer_name = kwargs["data"].get("customer_name", None)
     customer.mobile_no = kwargs["data"].get("mobile_no", None)
+    customer.mobile2 = kwargs["data"].get("mobile2", None)
     customer.lead_name = kwargs["data"].get("lead_name", None)
     customer.customer_type = kwargs["data"].get("customer_type", None)
     customer.customer_group = kwargs["data"].get("customer_group", None)
@@ -80,7 +81,7 @@ def customer(**kwargs):
     customer.longitude = kwargs["data"].get("longitude", None)
     customer.latitude = kwargs["data"].get("latitude", None)
     customer.append("credit_limits", kwargs["data"].get("credit_limits")[0])
-    customer.new_governorate = kwargs["data"].get("new_governorate", None)
+    customer.new_governorate = kwargs["data"].get("governorate", None)
 
     # START CODE THAT ONLY FROM EGUE AND ITS SIMILAR
     # only for egeu and company that like it, because each customer has exactly one sales_person
@@ -284,6 +285,10 @@ def sales_order(**kwargs):
 
 @frappe.whitelist(allow_guest=True)
 def sales_invoice(**kwargs):
+    if "select" not in kwargs["data"] or not kwargs["data"]["select"]:
+        frappe.response['http_status_code'] = 400
+        return "برجاء اختيار نوع الخصم!"
+
     sales_invoice = frappe.get_doc(kwargs["data"])
 
     sales_team = frappe.get_all("Sales Team", filters={"parent": sales_invoice.customer},
@@ -409,9 +414,9 @@ def item(**kwargs):
 def stock_entry(**kwargs):
     stock_entry = frappe.get_doc(kwargs["data"])
     stock_entry.insert()
-    stock_entry_name = stock_entry.name
     frappe.db.commit()
-
+    
+    stock_entry_name = stock_entry.name
     if stock_entry_name:
         message = frappe.response["message"] = {
             "success_key": True,
@@ -1306,4 +1311,17 @@ def contact(**kwargs):
         return message
     else:
         return "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
+
+
+@frappe.whitelist(methods=["POST"])
+def workflow(**kwargs):
+    if "data" not in kwargs:
+        frappe.throw("data key must be in the body.", frappe.exceptions.ValidationError)
+
+    data = kwargs["data"]
+    workflow = frappe.get_doc(data)
+    workflow.insert()
+
+    response = {"succss_key": True, "workflow": workflow.name}
+    return response
 
