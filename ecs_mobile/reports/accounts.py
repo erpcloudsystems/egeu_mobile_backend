@@ -2,6 +2,8 @@ from frappe.utils import flt, getdate
 from erpnext.accounts.utils import get_balance_on
 import frappe
 from frappe import _
+from frappe.utils import getdate, nowdate
+
 
 
 @frappe.whitelist(methods=["GET"])
@@ -84,45 +86,57 @@ def general_ledger(from_date=None, to_date=None, account=None, party_type=None ,
 @frappe.whitelist(methods=["GET"])
 def accounts_receivable(from_date=None, to_date=None, customer_name=None, customer_code=None, sales_person_name=None, start=0, page_length=20):
     conditions = ""
-    if (from_date) and (to_date):
+    if from_date and to_date:
         conditions += f" AND sales_invoice.posting_date BETWEEN '{from_date}' AND '{to_date}'"
     if customer_name:
         conditions += f" AND customer.name = '{customer_name}'"
-
     if customer_code:
         conditions += f" AND customer.code = '{customer_code}'"
-
     if sales_person_name:
         conditions += f" AND sales_person.sales_person = '{sales_person_name}'"
 
+    query = frappe.db.sql(f"""
+        SELECT
+            customer.name AS customer_name,
+            customer.code AS customer_code,
+            sales_person.sales_person AS sales_person,
+            sales_invoice.posting_date AS date
+        FROM
+            `tabCustomer` customer
+        JOIN
+            `tabSales Team` sales_person ON customer.name = sales_person.parent
+        LEFT JOIN
+            `tabSales Invoice` sales_invoice ON sales_invoice.customer = customer.name
+        WHERE  
+            sales_invoice.docStatus = 1
+            {conditions}
+        GROUP BY
+            customer.name
+        ORDER BY
+            sales_person.sales_person
+        LIMIT {start}, {page_length}
+        """, as_dict=True)
 
-    data = frappe.db.sql(f"""
-    SELECT
-        customer.name AS customer_name,
-        customer.code AS customer_code,
-        sales_person.sales_person AS sales_person,
-        SUM(sales_invoice.outstanding_amount) AS outstanding_amount,
-        sales_invoice.posting_date AS date
-    FROM
-        `tabCustomer` customer
-    JOIN
-        `tabSales Team` sales_person ON customer.name = sales_person.parent
-    LEFT JOIN
-        `tabSales Invoice` sales_invoice ON sales_invoice.customer = customer.name
-    WHERE 
-        outstanding_amount is not null
-    AND 
-        sales_invoice.docStatus = 1
-        {conditions}
-    GROUP BY
-        customer.name
-    ORDER BY
-        sales_person.sales_person
-    LIMIT {start}, {page_length}
-    """, as_dict=True)
+    data_with_balance = []
 
-    if data:
-        return data
+    if query:
+        for customer_data in query:
+            # Calculating outstanding_balance for each customer
+            outstanding_balance = get_balance_on(
+                account=None,
+                date=to_date,
+                party_type="Customer",
+                party=customer_data["customer_name"],
+                company=None,
+                in_account_currency=True,
+                cost_center=None,
+                ignore_account_permission=False
+            )
+            # Adding outstanding_balance to the customer_data dictionary
+            customer_data["outstanding_balance"] = outstanding_balance
+            data_with_balance.append(customer_data)
+
+        return data_with_balance
     else:
         frappe.local.response.http_status_code = 404
         return "لا توجد بيانات"
