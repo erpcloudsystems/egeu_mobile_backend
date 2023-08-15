@@ -81,7 +81,7 @@ def customer(**kwargs):
     customer.longitude = kwargs["data"].get("longitude", None)
     customer.latitude = kwargs["data"].get("latitude", None)
     customer.append("credit_limits", kwargs["data"].get("credit_limits")[0])
-    customer.new_governorate = kwargs["data"].get("governorate", None)
+    customer.new_governorate = kwargs["data"].get("new_governorate", None)
 
     # START CODE THAT ONLY FROM EGUE AND ITS SIMILAR
     # only for egeu and company that like it, because each customer has exactly one sales_person

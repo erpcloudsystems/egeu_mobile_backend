@@ -604,7 +604,7 @@ def customer(name):
             "customer_type",
             "customer_group",
             "territory",
-            "governorate",
+            "new_governorate",
             "market_segment",
             "industry",
             "tax_id",
@@ -636,7 +636,7 @@ def customer(name):
         cust["market_segment"] = x.market_segment
         cust["industry"] = x.industry
         cust["tax_id"] = x.tax_id
-        cust["governorate"] = x.governorate
+        cust["new_governorate"] = x.new_governorate
         cust["mobile2"] = x.mobile2
         cust["customer_primary_address"] = x.customer_primary_address
         cust["address_line1"] = frappe.db.get_value(
