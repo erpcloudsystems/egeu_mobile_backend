@@ -168,7 +168,7 @@ def pe_before_insert(doc, method=None):
     mode_of_payment_account_2 = frappe.db.get_value("Mode of Payment Account", {'parent': doc.mode_of_payment_2},
                                                   'default_account')
     doc.received_amount = doc.paid_amount
-    doc.reference_date = doc.posting_date
+    # doc.reference_date = doc.posting_date
 
     if doc.payment_type == "Receive" and doc.party_type == "Customer":
         doc.paid_from = receivable_account
