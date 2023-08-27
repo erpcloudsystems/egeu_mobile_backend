@@ -350,7 +350,6 @@ def general_service(
         if search_text != "%%":
             conditions1["name"] = ["like", search_text]
             conditions1["customer_name"] = ["like", search_text]
-            conditions1["mobile2"] = ["like", search_text]
             conditions1["code"] = ["like", search_text]
         if filter1 != "%%":
             conditions["customer_group"] = filter1
