@@ -49,6 +49,7 @@ def general_service(
 
     ########################### Lead Full List & Search ############################
     if doctype == "Sales Person" and con_doc == "%%":
+        print("oj")
         conditions = {}
         if search_text != "%%":
             conditions["name"] = ["like", search_text]
@@ -1155,18 +1156,28 @@ def general_service(
 
     ########################### Warehouse Full List & Search ############################
     if doctype == "Warehouse" and con_doc == "%%":
-        query = frappe.db.get_list(
+        if filter1=="1":
+            query = frappe.db.get_list(
             "Warehouse",
-            filters=[{"is_group": ["=", 0]}],
-            or_filters=[
-                {"name": ["like", search_text]},
-                {"warehouse_name": ["like", search_text]},
-            ],
+            filters={"mobile":  1,"is_group": ["=", 0]},
             fields=["name", "warehouse_name", "warehouse_type", "parent_warehouse"],
             order_by="name asc",
             start=start,
             page_length=page_length,
         )
+        else:
+            query = frappe.db.get_list(
+                "Warehouse",
+                filters=[{"is_group": ["=", 0]}],
+                or_filters=[
+                    {"name": ["like", search_text]},
+                    {"warehouse_name": ["like", search_text]},
+                ],
+                fields=["name", "warehouse_name", "warehouse_type", "parent_warehouse"],
+                order_by="name asc",
+                start=start,
+                page_length=page_length,
+            )
         if query:
             return query
         else:

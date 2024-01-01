@@ -896,7 +896,33 @@ def customer_visit(name):
 
 @frappe.whitelist()
 def sales_order(name):
+    previous_delivery_notes = frappe.db.sql("""
+        SELECT DISTINCT(DN.name) 
+        FROM `tabDelivery Note` DN 
+        JOIN `tabDelivery Note Item` DNI ON DN.name = DNI.parent
+        WHERE DNI.against_sales_order = '{name}'
+        AND DN.status = 'To Bill'
+        """.format(name=name), as_dict=1)
+    delivery_note_create = []
+
+    sales_order_items = frappe.get_all("Sales Order Item", {"parent": name}, ["item_code", "qty"])
+
+    for item in sales_order_items:
+        total_qty_previous_delivery_note = 0.0
+
+        for delivery_note in previous_delivery_notes:
+            item_dn_qty = frappe.get_all("Delivery Note Item", {"parent": delivery_note["name"], "item_code": item["item_code"]}, ["qty"])
+            total_qty_previous_delivery_note += item_dn_qty[0]['qty']
+
+        if total_qty_previous_delivery_note == item['qty']:
+            delivery_note_create.append(1)
+        else:
+            delivery_note_create.append(0)
+
+    key = 1 if all(delivery_note_create) else 0
+
     so = {}
+    so["create_deliver_note"]=key
     doc_data = frappe.db.get_all(
         "Sales Order",
         filters={"name": name},
@@ -1372,7 +1398,7 @@ def sales_invoice(name):
 
     if doc_data:
         customer_code = frappe.db.get_value("Customer", {"name": doc_data[0]["customer"]}, ["code"])
-
+        customer_code=str(customer_code)
     amended_to = frappe.db.get_value("Sales Invoice", {"amended_from": name}, ["name"])
     for x in doc_data:
         sinv["name"] = x.name
@@ -5810,4 +5836,18 @@ def workflow(name):
     # workflow.creation = humanize_datetime(str(workflow.creation))
     # workflow.modified = humanize_datetime(str(workflow.modified))
     return workflow
+
+@frappe.whitelist(allow_guest=True,methods=["GET"])
+def get_mobile_warehouse():
+    try:
+        warehouse=frappe.get_all("Warehouse",{"mobile":1})
+        if warehouse:
+            frappe.response["message"] = "success"
+            frappe.response["warehouses"] = warehouse
+            frappe.local.response["http_status_code"] = 200
+
+    except Exception as e:
+        frappe.throw(f"Error recording attendance: {e}")
+
+
 

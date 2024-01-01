@@ -431,6 +431,24 @@ def stock_entry(**kwargs):
 @frappe.whitelist(allow_guest=True)
 def delivery_note(**kwargs):
     delivery_note = frappe.get_doc(kwargs["data"])
+    for item in delivery_note.items:
+        so_name=item.against_sales_order
+        get_previous_delivery_note=frappe.db.sql("""
+            SELECT DISTINCT(DN.name) 
+            FROM `tabDelivery Note` DN 
+            JOIN `tabDelivery Note Item` DNI ON DN.name = DNI.parent
+            WHERE DNI.against_sales_order = '{so_name}'
+            AND DN.status = 'To Bill'
+            """.format(so_name=so_name), as_dict=1)
+        get_sales_order_qty=frappe.get_all("Sales Order Item",{"parent":item.against_sales_order,"item_code":item.item_code},['qty'])
+        total_qty_previous_delivery_note=0.0
+        if get_previous_delivery_note:
+            for row in get_previous_delivery_note:
+                previous_qty=frappe.get_all("Delivery Note Item",{"parent":row['name'],"item_code":item.item_code},["qty"])
+                total_qty_previous_delivery_note += previous_qty[0]['qty']
+
+        if item.qty +  total_qty_previous_delivery_note > get_sales_order_qty[0]['qty']:
+            return "لا يمكن اضافة المعاملة"
     delivery_note.insert()
     delivery_note_name = delivery_note.name
     frappe.db.commit()
@@ -438,7 +456,7 @@ def delivery_note(**kwargs):
         message = frappe.response["message"] = {
             "success_key": True,
             "message": "تم اضافة المعاملة بنجاح!",
-            "delivery_note": delivery_note_name,
+            "delivery_note": delivery_note_name
         }
         return message
     else:
