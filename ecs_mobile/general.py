@@ -1159,7 +1159,7 @@ def general_service(
         if filter1=="1":
             query = frappe.db.get_list(
             "Warehouse",
-            filters={"mobile":  1,"is_group": ["=", 0]},
+            filters={"mobile": 1,"is_group": ["=", 0]},
             fields=["name", "warehouse_name", "warehouse_type", "parent_warehouse"],
             order_by="name asc",
             start=start,

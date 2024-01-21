@@ -73,7 +73,7 @@ def customer(**kwargs):
     customer.territory = kwargs["data"].get("territory", None)
     customer.market_segment = kwargs["data"].get("market_segment", None)
     customer.industry = kwargs["data"].get("industry", None)
-    customer.tax_id = kwargs["data"].get("tax_id", None)
+    customer.tax_id = kwargs["data"].get("tax_id", None)    
     customer.default_currency = kwargs["data"].get("default_currency", None)
     customer.default_price_list = kwargs["data"].get("default_price_list", None)
     customer.default_sales_partner = kwargs["data"].get("default_sales_partner", None)
@@ -133,7 +133,6 @@ def customer(**kwargs):
         }
     ]
     emails = [{"email_id": kwargs["data"].get("email_id"), "is_primary": 1}]
-
     contacts = [
         {
             "phone": kwargs["data"].get("mobile_no"),
@@ -142,58 +141,60 @@ def customer(**kwargs):
         }
     ]
 
-    contact = frappe.get_doc(
-        {
-            "doctype": "Contact",
-            "first_name": kwargs["data"]["customer_name"],
-            "links": links,
-            "email_ids": emails,
-            "phone_nos": contacts,
-            "is_primary_contact": 1,
-            "is_billing_contact": 1,
-        }
-    )
-    if (
-            kwargs["data"].get("customer_name")
-            and kwargs["data"].get("email_id")
-            and kwargs["data"].get("mobile_no")
-    ):
-        contact.insert()
-        customer.customer_primary_contact = contact.name
-
-    address = frappe.new_doc("Address")
+    contact_name = kwargs["data"]["customer_name"] + str(frappe.generate_hash(length=5))
+    if not frappe.db.exists('Contact', contact_name):
+        contact = frappe.get_doc(
+            {
+                "doctype": "Contact",
+                "first_name": contact_name,
+                "links": links,
+                "email_ids": emails,
+                "phone_nos": contacts,
+                "is_primary_contact": 1,
+                "is_billing_contact": 1,
+            }
+        )
+        if (
+                kwargs["data"].get("customer_name")
+                and kwargs["data"].get("email_id")
+                and kwargs["data"].get("mobile_no")
+        ):
+            contact.insert()
+            customer.customer_primary_contact = contact.name
     address_link = [
         {
+            "parenttype": "Address",
+            "doctype": "Dynamic Link",
             "link_doctype": "Customer",
             "link_name": customer_name,
-            "link_title": customer_name,
         }
     ]
-    address.address_title = kwargs["data"].get("customer_name", None)
-    address.address_line1 = kwargs["data"].get("address_line1", None)
-    address.city = kwargs["data"].get("city", None)
-    address.country = kwargs["data"].get("country", None)
-    address.address_type = "Billing"
-    address.is_primary_address_type = 1
-    address.is_shipping_address_type = 1
-    # address.links = address_link
+    # Create a new address document
+    address = frappe.get_doc(
+        {
+            "doctype": "Address",
+            "address_title":kwargs["data"]["customer_name"],
+            "address_type": "Billing",
+            "address_line1": kwargs["data"]["address_line1"],
+            "city": kwargs["data"]["city"],
+            "country": kwargs["data"]["country"],
+            "is_primary_address": 1,
+            "links": address_link
+        }
+    )
 
-    if (
-            kwargs["data"].get("customer_name")
-            and kwargs["data"].get("address_line1")
-            and kwargs["data"].get("city")
-            and kwargs["data"].get("address_type", "Billing")
-    ):
-        address.insert()
-        customer.customer_primary_address = address.name
+    # Set flags to ignore permissions and password policy
+    address.flags.ignore_permissions = True
+    address.flags.ignore_password_policy = True
+
+    # Insert the new address
+    address.insert()
+    customer.customer_primary_address = address.name
     customer.save()
-    # customer =frappe.get_doc(kwargs['data'])
-
-    # customer.insert()
 
     frappe.db.commit()
     if customer_name:
-        message = frappe.response["message"] = {
+        message = {
             "success_key": True,
             "message": "تم اضافة المعاملة بنجاح!",
             "customer": customer_name,
@@ -201,7 +202,6 @@ def customer(**kwargs):
         return message
     else:
         return "حدث خطأ ولم نتمكن من اضافة المعاملة . برجاء المحاولة مرة اخري!"
-
 
 @frappe.whitelist(allow_guest=True)
 def sales_order(**kwargs):
