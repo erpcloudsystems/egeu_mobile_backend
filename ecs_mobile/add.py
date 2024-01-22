@@ -176,7 +176,7 @@ def customer(**kwargs):
             "address_title":kwargs["data"]["customer_name"],
             "address_type": "Billing",
             "address_line1": kwargs["data"]["address_line1"],
-            "city": kwargs["data"]["city"],
+            "city": kwargs["data"]["new_governorate"],
             "country": kwargs["data"]["country"],
             "is_primary_address": 1,
             "links": address_link
