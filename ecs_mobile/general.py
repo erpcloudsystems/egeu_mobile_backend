@@ -3888,10 +3888,12 @@ def get_item_list(
                                                     ifnull((select distinct `tabItem Tax Template Detail`.tax_rate from `tabItem Tax Template Detail` join `tabItem Tax` 
                                                     where `tabItem Tax Template Detail`.parent = `tabItem Tax`.item_tax_template and `tabItem Tax`.parent = `tabItem`.name),0) as tax_percent
                                                     from tabItem
-                                                    where tabItem.name like '%{search_text}%'
-                                                    or tabItem.item_name like '%{search_text}%'
+                                                    where
+                                                    tabItem.disabled = 0
                                                     {conditions}
-                                                    and tabItem.disabled = 0
+                                                    and 
+                                                    (tabItem.name like '%{search_text}%'
+                                                    or tabItem.item_name like '%{search_text}%')
                                                     LIMIT {start}, {page_length}""",
             as_dict=True,
         )
